@@ -1,85 +1,114 @@
-'use client' // Indique que ce component s'exécute côté client (browser)
-import { useState } from 'react' // Hook pour gérer les states du component
-import { motion } from 'framer-motion' // Librairie pour les animations
-import { saveToWaitlist } from '@/utils/supabase' // Notre fonction pour sauver en BDD
+'use client'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { saveToWaitlist, testSupabaseConnection } from '@/utils/supabase'
 
-// ✅ TYPE POUR LES ERREURS (au lieu de 'any')
-interface ApiError {
-  message?: string
-  code?: string
-}
-
-// 🎯 POSITIONS FIXES POUR LES ÉLÉMENTS FLOTTANTS
-// On évite Math.random() pour pas d'erreur d'hydratation
+// 🎯 POSITIONS FIXES POUR ÉVITER L'ERREUR D'HYDRATATION
 const FLOATING_ELEMENTS = [
-  { left: 10, top: 20 },   // Position en % de l'élément 1
-  { left: 80, top: 30 },   // Position en % de l'élément 2
-  { left: 25, top: 60 },   // Position en % de l'élément 3
-  { left: 90, top: 10 },   // etc...
-  { left: 15, top: 80 },
-  { left: 60, top: 40 },
-  { left: 40, top: 70 },
-  { left: 95, top: 85 },
-  { left: 5, top: 50 },
-  { left: 70, top: 15 },
-  { left: 30, top: 90 },
-  { left: 85, top: 25 },
-  { left: 50, top: 5 },
-  { left: 20, top: 45 },
-  { left: 75, top: 65 }
+  { left: 10, top: 20 }, { left: 80, top: 30 }, { left: 25, top: 60 },
+  { left: 90, top: 10 }, { left: 15, top: 80 }, { left: 60, top: 40 },
+  { left: 40, top: 70 }, { left: 95, top: 85 }, { left: 5, top: 50 },
+  { left: 70, top: 15 }, { left: 30, top: 90 }, { left: 85, top: 25 },
+  { left: 50, top: 5 }, { left: 20, top: 45 }, { left: 75, top: 65 }
 ]
 
-// 🎯 COMPONENT PRINCIPAL DE LA LANDING PAGE
-export function FatahLanding() {
-  // 📱 STATES DU FORMULAIRE
-  const [phone, setPhone] = useState('') // Numéro de téléphone saisi
-  const [isSubmitted, setIsSubmitted] = useState(false) // Si formulaire envoyé avec succès
-  const [isLoading, setIsLoading] = useState(false) // Si en cours d'envoi
-  const [error, setError] = useState('') // Message d'erreur à afficher
+// 📱 VALIDATION NUMÉRO TÉLÉPHONE CÔTE D'IVOIRE
+const validateIvorianPhone = (phone: string): boolean => {
+  const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '')
+  
+  // 🇨🇮 PATTERNS CÔTE D'IVOIRE
+  const patterns = [
+    /^(\+225|00225)?[0-9]{10}$/,    // +225 + 10 chiffres
+    /^(07|05|01)[0-9]{8}$/,         // 07/05/01 + 8 chiffres
+    /^[0-9]{10}$/                   // 10 chiffres direct
+  ]
+  
+  return patterns.some(pattern => pattern.test(cleanPhone))
+}
 
-  // 🚀 FONCTION QUI GÈRE L'ENVOI DU FORMULAIRE
+// 🎨 FORMATAGE VISUEL DU NUMÉRO
+const formatPhoneDisplay = (phone: string): string => {
+  const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '')
+  
+  if (cleanPhone.length >= 2) {
+    return cleanPhone.replace(/(\d{2})(\d{2})?(\d{2})?(\d{2})?(\d{2})?/, '$1 $2 $3 $4 $5').trim()
+  }
+  return cleanPhone
+}
+
+// 🏠 COMPONENT PRINCIPAL
+export function FatahLanding() {
+  // 📱 ÉTATS DU FORMULAIRE
+  const [phone, setPhone] = useState('')
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // 🔍 TEST DE CONNEXION SUPABASE AU CHARGEMENT
+  useEffect(() => {
+    testSupabaseConnection()
+  }, [])
+
+  // ⌨️ GESTION DE LA SAISIE DU TÉLÉPHONE
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    const formatted = formatPhoneDisplay(value)
+    setPhone(formatted)
+  }
+
+  // 🚀 SOUMISSION DU FORMULAIRE
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault() // Empêche le rechargement de page par défaut
-    setIsLoading(true) // Active le loader
-    setError('') // Reset les erreurs précédentes
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
     
-    // ✅ VALIDATION CÔTÉ CLIENT
-    if (!phone || phone.length < 8) {
-      setError('Numéro de téléphone invalide')
-      setIsLoading(false)
-      return // Arrête la fonction ici
-    }
+    console.log('📝 Formulaire soumis avec:', phone)
     
     try {
-      // 📊 TENTATIVE DE SAUVEGARDE EN BASE DE DONNÉES
-      await saveToWaitlist(phone)
-      setIsSubmitted(true) // Affiche la page de confirmation
-    } catch (error) {
-      // ✅ GESTION D'ERREUR TYPÉE (plus de 'any')
-      console.error('Error:', error)
-      const apiError = error as ApiError
-      
-      // 🔍 DIFFÉRENTS TYPES D'ERREURS
-      if (apiError.message?.includes('duplicate')) {
-        setError('Ce numéro est déjà inscrit ! 😊')
-      } else {
-        setError('Erreur lors de l\'inscription. Réessaie stp !')
+      // ✅ VALIDATIONS
+      if (!phone.trim()) {
+        setError('Numéro de téléphone requis')
+        return
       }
+      
+      if (!validateIvorianPhone(phone)) {
+        setError('Format invalide. Ex: 07 09 12 34 56')
+        return
+      }
+      
+      // 💾 SAUVEGARDE
+      await saveToWaitlist(phone)
+      setIsSubmitted(true)
+      
+    } catch (error) {
+      console.error('🚨 Erreur soumission:', error)
+      
+      // 🔍 GESTION DES ERREURS SPÉCIFIQUES
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      if (errorMessage === 'DUPLICATE_PHONE') {
+        setError('Ce numéro est déjà inscrit ! 😊')
+      } else if (errorMessage === 'TABLE_NOT_FOUND') {
+        setError('Erreur technique. Contacte l\'équipe !')
+      } else if (errorMessage.includes('SUPABASE_ERROR')) {
+        setError('Problème de base de données. Réessaie !')
+      } else {
+        setError('Erreur technique. Réessaie dans quelques secondes !')
+      }
+      
     } finally {
-      // ⏹️ TOUJOURS EXÉCUTÉ, même si erreur
-      setIsLoading(false) // Désactive le loader
+      setIsLoading(false)
     }
   }
 
-  // 🎉 PAGE DE CONFIRMATION (si inscription réussie)
+  // 🎉 PAGE DE CONFIRMATION
   if (isSubmitted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center p-4">
-        {/* 🎬 ANIMATION D'ENTRÉE AVEC ROTATION */}
         <motion.div
-          initial={{ scale: 0, rotate: -180 }} // État initial (invisible, tourné)
-          animate={{ scale: 1, rotate: 0 }}     // État final (visible, droit)
-          transition={{ duration: 0.8, type: "spring" }} // Type d'animation
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ duration: 0.8, type: "spring" }}
           className="text-center text-white max-w-md"
         >
           <div className="text-8xl mb-6">🎉</div>
@@ -89,10 +118,9 @@ export function FatahLanding() {
             On te contacte dès que Fatah est prêt pour révolutionner Abidjan ! 💪
           </p>
           
-          {/* 📱 ICÔNE ANIMÉE QUI BOUNCE */}
           <motion.div
-            animate={{ y: [0, -10, 0] }} // Animation up/down
-            transition={{ duration: 2, repeat: Infinity }} // Répète à l'infini
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
             className="mt-8 text-6xl"
           >
             📱
@@ -102,61 +130,56 @@ export function FatahLanding() {
     )
   }
 
-  // 🏠 PAGE PRINCIPALE DE LA LANDING
+  // 🏠 LANDING PAGE PRINCIPALE
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 overflow-hidden">
       <div className="container mx-auto px-4 py-8 relative">
         
-        {/* 🌟 ÉLÉMENTS FLOTTANTS EN ARRIÈRE-PLAN */}
+        {/* 🌟 ÉLÉMENTS FLOTTANTS */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {FLOATING_ELEMENTS.map((pos, i) => (
             <motion.div
-              key={i} // Clé unique pour React
+              key={i}
               className="absolute"
-              // 🎬 ANIMATIONS DES ÉLÉMENTS
               animate={{
-                x: [0, 100, 0],      // Mouvement horizontal
-                y: [0, -100, 0],     // Mouvement vertical
-                rotate: [0, 180, 360], // Rotation complète
+                x: [0, 100, 0],
+                y: [0, -100, 0],
+                rotate: [0, 180, 360],
               }}
               transition={{
-                duration: 4 + i * 0.5, // Durée différente pour chaque élément
-                repeat: Infinity,        // Répète à l'infini
-                ease: "easeInOut"       // Type d'accélération
+                duration: 4 + i * 0.5,
+                repeat: Infinity,
+                ease: "easeInOut"
               }}
               style={{
-                left: `${pos.left}%`,  // Position horizontale
-                top: `${pos.top}%`,    // Position verticale
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
               }}
             >
-              {/* 🔴 PETIT POINT BLANC FLOTTANT */}
               <div className="w-3 h-3 bg-white rounded-full opacity-20" />
             </motion.div>
           ))}
         </div>
 
-        {/* 📄 CONTENU PRINCIPAL */}
         <div className="relative z-10 text-center text-white">
           
-          {/* 🎯 SECTION HERO (titre principal) */}
+          {/* 🎯 HERO SECTION */}
           <motion.div
-            initial={{ opacity: 0, y: 50 }} // Commence invisible et en bas
-            animate={{ opacity: 1, y: 0 }}  // Devient visible et centré
-            transition={{ duration: 1 }}     // Durée de l'animation
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1 }}
           >
-            {/* 🔥 TITRE PRINCIPAL AVEC DÉGRADÉ ANIMÉ */}
             <motion.h1 
               className="text-6xl md:text-8xl font-black mb-4 bg-gradient-to-r from-yellow-300 via-white to-yellow-300 bg-clip-text text-transparent"
               animate={{ 
-                backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'], // Animation du dégradé
+                backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
               }}
-              transition={{ duration: 3, repeat: Infinity }} // Répète toutes les 3 secondes
-              style={{ backgroundSize: '200% 200%' }} // Taille du dégradé
+              transition={{ duration: 3, repeat: Infinity }}
+              style={{ backgroundSize: '200% 200%' }}
             >
               FATAH
             </motion.h1>
             
-            {/* 📝 SOUS-TITRES */}
             <p className="text-2xl md:text-4xl font-bold mb-2">
               🔥 Le TikTok du Commerce 🔥
             </p>
@@ -165,20 +188,19 @@ export function FatahLanding() {
             </p>
           </motion.div>
 
-          {/* 🎯 SECTION FEATURES (caractéristiques) */}
+          {/* 🎯 FEATURES */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }} // Commence petit et invisible
-            animate={{ opacity: 1, scale: 1 }}   // Devient normal et visible
-            transition={{ delay: 0.5, duration: 0.8 }} // Délai de 0.5s avant animation
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
             className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-5xl mx-auto"
           >
-            {/* 📊 TABLEAU DES FEATURES */}
             {[
               {
                 icon: "📱",
                 title: "Stories Produits",
                 desc: "Poste tes produits en story comme sur TikTok ! Disparaît en 24h = urgence d'acheter !",
-                delay: 0.1 // Délai d'animation pour cet élément
+                delay: 0.1
               },
               {
                 icon: "💬",
@@ -192,13 +214,13 @@ export function FatahLanding() {
                 desc: "Ton produit chez toi en 30min max ! Partout à Abidjan.",
                 delay: 0.3
               }
-            ].map((feature, i) => ( // Pour chaque feature dans le tableau
+            ].map((feature, i) => (
               <motion.div
-                key={i} // Clé unique
-                initial={{ opacity: 0, y: 50 }} // État initial
-                animate={{ opacity: 1, y: 0 }}  // État final
-                transition={{ delay: 0.5 + feature.delay, duration: 0.6 }} // Délai personnalisé
-                whileHover={{ scale: 1.05, y: -5 }} // Animation au survol souris
+                key={i}
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + feature.delay, duration: 0.6 }}
+                whileHover={{ scale: 1.05, y: -5 }}
                 className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 hover:border-white/40 transition-all"
               >
                 <div className="text-5xl mb-4">{feature.icon}</div>
@@ -208,87 +230,78 @@ export function FatahLanding() {
             ))}
           </motion.div>
 
-          {/* 🎯 FORMULAIRE PRINCIPAL D'INSCRIPTION */}
+          {/* 🚀 FORMULAIRE PRINCIPAL */}
           <motion.div
-            initial={{ opacity: 0, y: 30 }} // Commence en bas et invisible
-            animate={{ opacity: 1, y: 0 }}  // Monte et devient visible
-            transition={{ delay: 1, duration: 0.8 }} // Délai de 1 seconde
-            className="max-w-lg mx-auto"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1, duration: 0.8 }}
+            className="max-w-lg mx-auto px-4"
           >
-            <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-8 border border-white/30 shadow-2xl">
-              <h2 className="text-3xl font-bold mb-2">
+            <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-6 md:p-8 border border-white/30 shadow-2xl">
+              <h2 className="text-2xl md:text-3xl font-bold mb-2 text-center">
                 🚀 Rejoins la révolution !
               </h2>
-              <p className="text-lg opacity-80 mb-6">
+              <p className="text-base md:text-lg opacity-80 mb-6 text-center">
                 Sois parmi les premiers à tester Fatah
               </p>
               
-              {/* 📝 FORMULAIRE HTML */}
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  {/* 📱 INPUT TÉLÉPHONE */}
+                <div className="w-full">
                   <input
-                    type="tel" // Type téléphone pour clavier mobile optimisé
-                    placeholder="Ton numéro WhatsApp (ex: 07 09 12 34 56)"
-                    value={phone} // Valeur liée au state
-                    onChange={(e) => setPhone(e.target.value)} // Met à jour le state
-                    required // Champ obligatoire
-                    className="w-full p-4 rounded-2xl text-black text-lg font-medium placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all"
+                    type="tel"
+                    placeholder="Ex: 07 09 12 34 56"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    required
+                    className="w-full p-4 rounded-2xl text-black text-base md:text-lg font-medium placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all text-center md:text-left"
                   />
                 </div>
                 
-                {/* ⚠️ AFFICHAGE DES ERREURS */}
                 {error && (
                   <motion.p
-                    initial={{ opacity: 0, x: -20 }} // Animation d'entrée de l'erreur
+                    initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="text-yellow-300 text-sm font-medium"
+                    className="text-yellow-300 text-sm font-medium text-center"
                   >
                     ⚠️ {error}
                   </motion.p>
                 )}
                 
-                {/* 🚀 BOUTON DE SOUMISSION */}
                 <motion.button
                   type="submit"
-                  disabled={isLoading} // Désactivé pendant le chargement
-                  whileHover={{ scale: 1.05 }} // Animation au survol
-                  whileTap={{ scale: 0.95 }}   // Animation au clic
-                  className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-black py-4 rounded-2xl text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isLoading}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-black py-4 rounded-2xl text-base md:text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
-                    // 🔄 ÉTAT DE CHARGEMENT
                     <span className="flex items-center justify-center">
-                      {/* ⏳ SPINNER ANIMÉ */}
                       <motion.div
-                        animate={{ rotate: 360 }} // Rotation 360°
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }} // Répète linéairement
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                         className="w-5 h-5 border-2 border-black border-t-transparent rounded-full mr-2"
                       />
                       Inscription...
                     </span>
                   ) : (
-                    // 🔥 ÉTAT NORMAL
                     '🔥 JE VEUX ÊTRE LE PREMIER !'
                   )}
                 </motion.button>
               </form>
               
-              {/* 📝 TEXTE LÉGAL */}
-              <p className="text-sm opacity-70 mt-4 leading-relaxed">
+              <p className="text-xs md:text-sm opacity-70 mt-4 leading-relaxed text-center">
                 * Inscription 100% gratuite • On te contacte dès le lancement ! 🎯
               </p>
             </div>
           </motion.div>
 
-          {/* 🎯 SECTION FOOTER */}
+          {/* 🎯 FOOTER */}
           <motion.div
-            initial={{ opacity: 0 }} // Commence invisible
-            animate={{ opacity: 1 }}  // Devient visible
-            transition={{ delay: 1.5, duration: 1 }} // Délai de 1.5 secondes
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.5, duration: 1 }}
             className="mt-16 space-y-4"
           >
-            {/* 🎪 ÉMOJIS DÉCORATIFS */}
             <div className="flex justify-center space-x-6 text-2xl">
               <span>🇨🇮</span>
               <span>💎</span>
