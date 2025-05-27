@@ -81,22 +81,26 @@ export function FatahLanding() {
       setIsSubmitted(true)
       
     } catch (error) {
-      console.error('🚨 Erreur soumission:', error)
-      
-      // 🔍 GESTION DES ERREURS SPÉCIFIQUES
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
-      if (errorMessage === 'DUPLICATE_PHONE') {
-        setError('Ce numéro est déjà inscrit ! 😊')
-      } else if (errorMessage === 'TABLE_NOT_FOUND') {
-        setError('Erreur technique. Contacte l\'équipe !')
-      } else if (errorMessage.includes('SUPABASE_ERROR')) {
-        setError('Problème de base de données. Réessaie !')
-      } else {
-        setError('Erreur technique. Réessaie dans quelques secondes !')
-      }
-      
-    } finally {
+  console.error('🚨 Erreur soumission:', error)
+  
+  // 🔍 GESTION DES ERREURS SPÉCIFIQUES TYPÉE
+  let errorMessage = 'Erreur technique. Réessaie dans quelques secondes !'
+  
+  if (error instanceof Error) {
+    const errorMsg = error.message
+    
+    if (errorMsg === 'DUPLICATE_PHONE') {
+      errorMessage = 'Ce numéro est déjà inscrit ! 😊'
+    } else if (errorMsg === 'TABLE_NOT_FOUND') {
+      errorMessage = 'Erreur technique. Contacte l\'équipe !'
+    } else if (errorMsg.includes('SUPABASE_ERROR')) {
+      errorMessage = 'Problème de base de données. Réessaie !'
+    }
+  }
+  
+  setError(errorMessage)
+  
+} finally {
       setIsLoading(false)
     }
   }

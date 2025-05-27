@@ -1,4 +1,30 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+// 🎯 TYPE POUR LA BASE DE DONNÉES
+interface Database {
+  public: {
+    Tables: {
+      waitlist: {
+        Row: {
+          id: string
+          phone: string
+          created_at: string
+          source: string
+        }
+        Insert: {
+          phone: string
+          created_at?: string
+          source?: string
+        }
+        Update: {
+          phone?: string
+          created_at?: string
+          source?: string
+        }
+      }
+    }
+  }
+}
 
 // 🔍 DIAGNOSTIC COMPLET DES VARIABLES
 console.log('🔍 === DIAGNOSTIC SUPABASE ===')
@@ -19,12 +45,12 @@ if (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// ⚠️ VERSION TEMPORAIRE SANS ERREUR SI VARIABLES MANQUANTES
-let supabase: any = null
+// ✅ CLIENT SUPABASE TYPÉ
+let supabase: SupabaseClient<Database> | null = null
 
 if (supabaseUrl && supabaseKey) {
   try {
-    supabase = createClient(supabaseUrl, supabaseKey)
+    supabase = createClient<Database>(supabaseUrl, supabaseKey)
     console.log('✅ Client Supabase créé avec succès')
   } catch (error) {
     console.error('❌ Erreur création client:', error)
@@ -63,15 +89,27 @@ export const testSupabaseConnection = async (): Promise<boolean> => {
   }
 }
 
-// 💾 VERSION TEMPORAIRE SANS SUPABASE
-export const saveToWaitlist = async (phone: string): Promise<any> => {
+// 🎯 TYPE POUR LES RÉPONSES DE SAUVEGARDE
+interface SaveResponse {
+  success: boolean
+  phone: string
+  timestamp: string
+  data?: Database['public']['Tables']['waitlist']['Row'][]
+}
+
+// 💾 FONCTION SAUVEGARDE TYPÉE
+export const saveToWaitlist = async (phone: string): Promise<SaveResponse> => {
   console.log('📱 saveToWaitlist appelé avec:', phone)
   
   if (!supabase) {
     console.error('❌ Supabase non configuré, simulation...')
     // 🎭 SIMULATION D'UNE SAUVEGARDE RÉUSSIE
     await new Promise(resolve => setTimeout(resolve, 1000))
-    return { success: true, phone, timestamp: new Date().toISOString() }
+    return { 
+      success: true, 
+      phone, 
+      timestamp: new Date().toISOString() 
+    }
   }
 
   try {
@@ -79,7 +117,10 @@ export const saveToWaitlist = async (phone: string): Promise<any> => {
     
     const { data, error } = await supabase
       .from('waitlist')
-      .insert({ phone: cleanPhone })
+      .insert({ 
+        phone: cleanPhone,
+        source: 'landing_page'
+      })
       .select()
     
     if (error) {
@@ -87,9 +128,37 @@ export const saveToWaitlist = async (phone: string): Promise<any> => {
       throw new Error(`SUPABASE_ERROR: ${error.message || 'Erreur inconnue'}`)
     }
     
-    return data
+    return {
+      success: true,
+      phone: cleanPhone,
+      timestamp: new Date().toISOString(),
+      data
+    }
   } catch (error) {
     console.error('🚨 Exception saveToWaitlist:', error)
     throw error
+  }
+}
+
+// 📊 FONCTION COMPTAGE TYPÉE
+export const getWaitlistCount = async (): Promise<number> => {
+  if (!supabase) {
+    return 0
+  }
+
+  try {
+    const { count, error } = await supabase
+      .from('waitlist')
+      .select('*', { count: 'exact', head: true })
+    
+    if (error) {
+      console.error('Erreur comptage:', error)
+      return 0
+    }
+    
+    return count || 0
+  } catch (error) {
+    console.error('Exception comptage:', error)
+    return 0
   }
 }
